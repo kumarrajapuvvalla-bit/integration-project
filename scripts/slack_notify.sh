@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-
-# Send a Slack notification via Incoming Webhook.
-# Usage: slack_notify.sh "message" "webhook_url"
-
+# slack_notify.sh — posts a rich Slack message via Incoming Webhook
+# Usage: ./scripts/slack_notify.sh "<message>" "<webhook-url>"
 set -euo pipefail
 
-MESSAGE=${1:-"Build notification"}
-WEBHOOK_URL=${2:?"You must provide a webhook URL"}
+MESSAGE="${1:?Usage: slack_notify.sh <message> <webhook-url>}"
+WEBHOOK_URL="${2:?Usage: slack_notify.sh <message> <webhook-url>}"
 
-payload=$(cat <<EOF
-{
-  "text": "$MESSAGE",
-  "mrkdwn": true
-}
-EOF
-)
+# Build JSON payload using printf to handle special characters
+PAYLOAD=$(printf '{"text": "%s"}' "$(echo "$MESSAGE" | sed 's/"/\\"/g')")
 
-curl -X POST -H 'Content-type: application/json' --data "$payload" "$WEBHOOK_URL"
+curl --silent --fail --show-error \
+    -X POST \
+    -H 'Content-Type: application/json' \
+    --data "${PAYLOAD}" \
+    "${WEBHOOK_URL}"
+
+echo ""
+echo "[slack_notify] Message sent."

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: flight-ingest
+description: |
+  Flight Ingest Service — receives real-time flight event payloads,
+  validates them, emits Prometheus metrics, and forwards to downstream
+  consumers. Part of the integration-project portfolio.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - flight
+  - ingest
+  - fastapi
+  - integration
+maintainers:
+  - name: kumar raja puvvalla
+    url: https://github.com/kumarrajapuvvalla-bit
