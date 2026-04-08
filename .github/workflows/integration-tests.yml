@@ -1,0 +1,68 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * *'   # Daily 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options: [staging, production]
+
+jobs:
+  integration:
+    name: Integration Test Suite
+    runs-on: ubuntu-latest
+
+    services:
+      flight-ingest:
+        image: python:3.12-slim
+        options: >-
+          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Start flight-ingest locally
+        working-directory: services/flight-ingest
+        run: |
+          pip install -r requirements.txt uvicorn --quiet
+          uvicorn app.main:app --host 0.0.0.0 --port 8080 &
+          sleep 3
+          curl --fail --retry 3 http://localhost:8080/healthz
+
+      - name: Install test dependencies
+        run: pip install pytest httpx --quiet
+
+      - name: Run integration tests
+        working-directory: services/flight-ingest
+        env:
+          BASE_URL: http://localhost:8080
+        run: pytest tests/integration/ -v --tb=short
+
+      - name: Run Rust log-parser on CI output
+        working-directory: tools/log-parser
+        run: |
+          cargo build --release --quiet
+          echo 'ERROR: something failed' | ./target/release/log-parser --stdin --format json
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: services/flight-ingest/test-results.xml
+          retention-days: 14

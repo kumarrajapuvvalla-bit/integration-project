@@ -1,0 +1,82 @@
+name: Python CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+  pull_request:
+    paths:
+      - 'services/**'
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  lint-and-test:
+    name: Lint & Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('services/flight-ingest/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        working-directory: services/flight-ingest
+        run: pip install -r requirements.txt pytest pytest-cov httpx ruff bandit
+
+      - name: Lint with ruff
+        working-directory: services/flight-ingest
+        run: ruff check . --select E,F,W --ignore E501
+
+      - name: Security scan with bandit
+        working-directory: services/flight-ingest
+        run: bandit -r app/ -ll -q
+
+      - name: Run tests with coverage
+        working-directory: services/flight-ingest
+        run: |
+          pytest tests/unit/ -v \
+            --cov=app \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --junitxml=test-results.xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: services/flight-ingest/coverage.xml
+          fail_ci_if_error: false
+
+  docker-build:
+    name: Docker build (smoke test)
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t flight-ingest:ci \
+            -f services/flight-ingest/Dockerfile \
+            services/flight-ingest/
+      - name: Smoke test container
+        run: |
+          docker run -d --name ci-smoke -p 8080:8080 flight-ingest:ci
+          sleep 5
+          curl --fail http://localhost:8080/healthz
+          docker stop ci-smoke

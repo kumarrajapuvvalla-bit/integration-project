@@ -12,11 +12,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"  # Treat all warnings as errors
+  RUSTFLAGS: "-D warnings"
 
 jobs:
   build-test:
-    name: Build & Test
+    name: Build & Test (Rust ${{ matrix.rust }})
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,8 +27,7 @@ jobs:
         rust: [stable, beta]
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install Rust ${{ matrix.rust }}
         uses: dtolnay/rust-toolchain@master
@@ -36,7 +35,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: clippy, rustfmt
 
-      - name: Cache Cargo registry
+      - name: Cache Cargo
         uses: actions/cache@v4
         with:
           path: |
@@ -52,7 +51,7 @@ jobs:
       - name: Clippy (deny warnings)
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Build
+      - name: Build release
         run: cargo build --release
 
       - name: Run tests
@@ -63,6 +62,13 @@ jobs:
           ls -lh target/release/log-parser
           echo "Binary size: $(du -sh target/release/log-parser | cut -f1)"
 
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: log-parser-${{ matrix.rust }}
+          path: tools/log-parser/target/release/log-parser
+          retention-days: 7
+
   security:
     name: cargo-audit
     runs-on: ubuntu-latest
@@ -70,14 +76,9 @@ jobs:
       run:
         working-directory: tools/log-parser
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
-
       - name: Run cargo-audit
         run: cargo audit
