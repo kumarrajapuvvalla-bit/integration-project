@@ -22,9 +22,7 @@ fn re_error() -> &'static Regex {
 
 fn re_warning() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)(\bWARN(ING)?\b|\bDEPRECATED\b)").unwrap()
-    })
+    RE.get_or_init(|| Regex::new(r"(?i)(\bWARN(ING)?\b|\bDEPRECATED\b)").unwrap())
 }
 
 fn re_test_result() -> &'static Regex {
@@ -49,9 +47,7 @@ fn re_duration() -> &'static Regex {
 
 fn re_stage() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"\[Pipeline\]\s+(?:stage\s+)?\(([^)]+)\)").unwrap()
-    })
+    RE.get_or_init(|| Regex::new(r"\[Pipeline\]\s+(?:stage\s+)?\(([^)]+)\)").unwrap())
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
