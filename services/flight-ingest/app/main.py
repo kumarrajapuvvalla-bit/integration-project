@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import PlainTextResponse
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
@@ -146,9 +146,7 @@ async def ingest_event(event: FlightEvent):
 
 @app.get("/events/summary", tags=["ingest"])
 async def events_summary():
-    """
-    Returns a summary of ingest counters.
-    """
+    """Returns a summary of ingest counters."""
     return {
         "description": "See /metrics for full Prometheus counters.",
         "note": "In production this would query a Redis or TimescaleDB store.",

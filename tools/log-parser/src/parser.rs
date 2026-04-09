@@ -8,41 +8,53 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 
-// ── Regex patterns ──────────────────────────────────────────────────────────
+// ── Regex patterns ──────────────────────────────────────────────────────────────────
 
 fn re_error() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)(\bERROR\b|\bFAILED\b|\bFAILURE\b|Build failed|FATAL|Exception in thread|java\.lang\.[A-Z]\w+Exception|\bFAIL\b)").unwrap()
+        Regex::new(
+            r"(?i)(\bERROR\b|\bFAILED\b|\bFAILURE\b|Build failed|FATAL|Exception in thread|java\.lang\.[A-Z]\w+Exception|\bFAIL\b)",
+        )
+        .unwrap()
     })
 }
 
 fn re_warning() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)(\bWARN(ING)?\b|\bDEPRECATED\b)").unwrap())
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)(\bWARN(ING)?\b|\bDEPRECATED\b)").unwrap()
+    })
 }
 
 fn re_test_result() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)")
-            .unwrap()
+        Regex::new(
+            r"Tests run:\s*(\d+),\s*Failures:\s*(\d+),\s*Errors:\s*(\d+),\s*Skipped:\s*(\d+)",
+        )
+        .unwrap()
     })
 }
 
 fn re_duration() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)(?:Finished|Total time):[^\d]*(\d+(?:\.\d+)?)\s*(min(?:ute)?s?|s(?:econds?)?)").unwrap()
+        Regex::new(
+            r"(?i)(?:Finished|Total time):[^\d]*(\d+(?:\.\d+)?)\s*(min(?:ute)?s?|s(?:econds?)?)",
+        )
+        .unwrap()
     })
 }
 
 fn re_stage() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"\[Pipeline\]\s+(?:stage\s+)?\(([^)]+)\)").unwrap())
+    RE.get_or_init(|| {
+        Regex::new(r"\[Pipeline\]\s+(?:stage\s+)?\(([^)]+)\)").unwrap()
+    })
 }
 
-// ── Types ────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────
 
 /// Severity level of a log entry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,7 +85,8 @@ pub struct TestSummary {
 
 impl TestSummary {
     pub fn passed(&self) -> u32 {
-        self.total.saturating_sub(self.failures + self.errors + self.skipped)
+        self.total
+            .saturating_sub(self.failures + self.errors + self.skipped)
     }
 }
 
@@ -103,7 +116,7 @@ impl ParsedLog {
     }
 }
 
-// ── Parser ─────────────────────────────────────────────────────────────────
+// ── Parser ──────────────────────────────────────────────────────────────────
 
 /// Parse raw Jenkins console log text into a [`ParsedLog`].
 pub fn parse_log(raw: &str) -> ParsedLog {

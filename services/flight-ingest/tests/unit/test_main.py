@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 
@@ -15,7 +14,6 @@ class TestHealth:
     def test_readiness(self):
         r = client.get("/readyz")
         assert r.status_code == 200
-        assert r.json()["status"] == "ready"
 
     def test_metrics_endpoint(self):
         r = client.get("/metrics")

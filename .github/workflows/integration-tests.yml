@@ -18,15 +18,8 @@ jobs:
   integration:
     name: Integration Test Suite
     runs-on: ubuntu-latest
-
-    services:
-      flight-ingest:
-        image: python:3.12-slim
-        options: >-
-          --health-cmd "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # No services: block — we start the app directly in a step below
+    # so the process has our dependencies available
 
     steps:
       - uses: actions/checkout@v4
@@ -36,22 +29,22 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Start flight-ingest locally
+      - name: Install dependencies
+        working-directory: services/flight-ingest
+        run: pip install -r requirements.txt uvicorn httpx pytest --quiet
+
+      - name: Start flight-ingest
         working-directory: services/flight-ingest
         run: |
-          pip install -r requirements.txt uvicorn --quiet
           uvicorn app.main:app --host 0.0.0.0 --port 8080 &
-          sleep 3
-          curl --fail --retry 3 http://localhost:8080/healthz
-
-      - name: Install test dependencies
-        run: pip install pytest httpx --quiet
+          sleep 4
+          curl --fail --retry 5 --retry-delay 2 http://localhost:8080/healthz
 
       - name: Run integration tests
         working-directory: services/flight-ingest
         env:
           BASE_URL: http://localhost:8080
-        run: pytest tests/integration/ -v --tb=short
+        run: pytest tests/integration/ -v --tb=short --junitxml=test-results.xml
 
       - name: Run Rust log-parser on CI output
         working-directory: tools/log-parser
