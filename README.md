@@ -4,135 +4,142 @@
 [![Python CI](https://github.com/kumarrajapuvvalla-bit/integration-project/actions/workflows/python-ci.yml/badge.svg)](https://github.com/kumarrajapuvvalla-bit/integration-project/actions/workflows/python-ci.yml)
 [![Integration Tests](https://github.com/kumarrajapuvvalla-bit/integration-project/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/kumarrajapuvvalla-bit/integration-project/actions/workflows/integration-tests.yml)
 
-A **production-grade multi-language CI/CD platform** demonstrating how a real DevOps team integrates Python, Rust, Docker, Helm, Jenkins, and GitHub Actions into a single cohesive pipeline.
-
-The story: a flight operations team needs a reliable event ingest pipeline with automated quality gates, security scanning at every layer, and zero-downtime Kubernetes deployments.
+A **production-grade multi-language CI/CD platform** demonstrating advanced API engineering, DevSecOps, and platform engineering practices across Python, Rust, Docker, Helm, Jenkins, and GitHub Actions.
 
 ---
 
-## What’s in here
+## Advanced API Features
 
+### 1. JWT Authentication (Client Credentials Flow)
+```bash
+# Get a token
+curl -X POST http://localhost:8080/token \
+  -H 'Content-Type: application/json' \
+  -d '{"client_id": "ops-service", "client_secret": "secret123"}'
+
+# Use it
+curl -X POST http://localhost:8080/v1/ingest \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"flight_id": "BA249", "origin": "LHR", "destination": "JFK", \
+       "airline": "BA", "event_type": "DEPARTURE", "timestamp": "2026-04-10T10:00:00Z"}'
 ```
-├── Jenkinsfile                    # 10-stage declarative pipeline
-├── .github/workflows/
-│   ├── python-ci.yml              # Python lint + test + Docker smoke (3.11 & 3.12)
-│   ├── rust-ci.yml                # Rust build + clippy + audit (stable & beta)
-│   └── integration-tests.yml      # End-to-end tests (daily + on-push)
-├── services/
-│   └── flight-ingest/             # FastAPI microservice
-│       ├── app/main.py            # /ingest, /healthz, /readyz, /metrics
-│       ├── tests/unit/            # 9 pytest unit tests
-│       ├── tests/integration/     # Full end-to-end tests
-│       ├── Dockerfile             # Multi-stage, non-root, CIS hardened
-│       └── requirements.txt
-├── tools/
-│   └── log-parser/                # Rust CLI: parses Jenkins logs → structured JSON
-├── helm/
-│   └── flight-ingest/             # Helm chart with HPA, PDB, ServiceMonitor
-├── scripts/
-│   ├── trivy-scan.sh              # Filesystem + image CVE scanning
-│   ├── health-check.sh            # Post-deploy readiness polling
-│   ├── rollback.sh                # Helm rollback with health verification
-│   └── slack_notify.sh            # Rich Slack build notifications
-└── docs/
-    └── ARCHITECTURE.md            # Mermaid pipeline + sequence diagrams
+
+### 2. API Versioning (URI strategy)
+
+| Endpoint | Version | Notes |
+|----------|---------|-------|
+| `POST /v1/ingest` | V1 | 3-letter IATA, standard fields |
+| `POST /v2/ingest` | V2 | Adds `priority`, `cabin_class`, `aircraft_type`, `codeshare_partners` |
+| `POST /ingest` | Legacy | Deprecated alias for v1, no auth required |
+
+### 3. Idempotency Keys
+```bash
+# First call — event created
+curl -X POST http://localhost:8080/v1/ingest \
+  -H 'Authorization: Bearer <token>' \
+  -H 'X-Idempotency-Key: my-unique-key-001' \
+  -H 'Content-Type: application/json' \
+  -d '{ ...payload... }'
+
+# Second call with same key — returns identical response, event NOT duplicated
+curl -X POST http://localhost:8080/v1/ingest \
+  -H 'Authorization: Bearer <token>' \
+  -H 'X-Idempotency-Key: my-unique-key-001' \
+  -H 'Content-Type: application/json' \
+  -d '{ ...payload... }'
+```
+Keys expire after 60 seconds. In production: Redis SETNX pattern.
+
+### 4. Cursor-Based Pagination
+```bash
+# First page
+curl 'http://localhost:8080/v1/events?limit=10' \
+  -H 'Authorization: Bearer <token>'
+
+# Next page (use next_cursor from previous response)
+curl 'http://localhost:8080/v1/events?limit=10&cursor=<next_cursor>' \
+  -H 'Authorization: Bearer <token>'
+```
+Cursors are opaque base64-encoded position indices. `limit` is clamped 1–100.
+
+### 5. Outbound Webhooks with HMAC Signing
+```bash
+# Register your endpoint
+curl -X POST http://localhost:8080/webhooks/register \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://your-server.com/events", "description": "prod listener"}'
+
+# Every accepted ingest event is POSTed to your URL with:
+# X-Webhook-Signature: sha256=<hmac>
+# X-Request-ID: <correlation-id>
+# Retries: 3 attempts with 2s/4s/8s exponential backoff
 ```
 
 ---
 
-## Jenkins Pipeline (10 stages)
+## Full API Reference
 
-| Stage | What happens |
-|-------|--------------|
-| 1. Checkout | Fetch source, capture author + commit msg |
-| 2. Lint | Python (ruff + bandit) + Rust (clippy + fmt) + Helm lint — **parallel** |
-| 3. Build | Python compile + Rust release build — **parallel** |
-| 4. Test | Pytest with JUnit + coverage + cargo test — **parallel** |
-| 5. SonarQube | Multi-language code quality analysis |
-| 6. Quality Gate | Abort pipeline if SonarQube gate fails |
-| 7. Security | OWASP safety + Trivy FS + cargo-audit — **parallel** |
-| 8. Docker | Build multi-stage image, push to GHCR, Trivy image scan |
-| 9. Staging | `helm upgrade --install`, health-check polling, Slack notify |
-| 10. Production | Manual approval gate (ops-team), prod Helm deploy |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/token` | — | Issue JWT (client credentials) |
+| GET | `/healthz` | — | Liveness probe |
+| GET | `/readyz` | — | Readiness probe |
+| GET | `/metrics` | — | Prometheus scrape |
+| POST | `/v1/ingest` | JWT | Ingest flight event (V1 payload) |
+| POST | `/v2/ingest` | JWT | Ingest flight event (V2 payload) |
+| GET | `/v1/events` | JWT | Paginated event list |
+| POST | `/webhooks/register` | JWT | Register outbound webhook |
+| GET | `/webhooks` | JWT | List registered webhooks |
+| POST | `/ingest` | — | Legacy alias (deprecated) |
 
 ---
 
 ## Quick Start
-
-### Run the Python service locally
 
 ```bash
 cd services/flight-ingest
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8080
 
-# Test it
-curl -X POST http://localhost:8080/ingest \
-  -H 'Content-Type: application/json' \
-  -d '{"flight_id": "BA249", "origin": "LHR", "destination": "JFK", \
-       "airline": "BA", "event_type": "DEPARTURE", "timestamp": "2026-04-08T14:00:00Z"}'
-
-# View Prometheus metrics
-curl http://localhost:8080/metrics
-```
-
-### Run the Rust log-parser
-
-```bash
-cd tools/log-parser
-cargo build --release
-
-# Parse a Jenkins log
-cat my-build.log | ./target/release/log-parser --stdin --format json
-
-# Or from a file with exit code on failure
-./target/release/log-parser --input build.log --fail-on-error
-```
-
-### Run all tests
-
-```bash
-# Python unit tests
-cd services/flight-ingest
-pip install pytest pytest-cov httpx
-pytest tests/unit/ -v --cov=app
-
-# Rust tests
-cd tools/log-parser
-cargo test --all
+# Interactive API docs
+open http://localhost:8080/docs
 ```
 
 ---
 
-## Event Types
+## Repository Map
 
-The `/ingest` endpoint accepts the following `event_type` values:
-
-| Event | Meaning |
-|-------|---------|
-| `DEPARTURE` | Aircraft departed origin |
-| `ARRIVAL` | Aircraft arrived at destination |
-| `DELAY` | Flight delayed (include `payload.delay_minutes`) |
-| `CANCEL` | Flight cancelled |
-| `DIVERT` | Flight diverted to alternate airport |
+```
+├── Jenkinsfile                    # 10-stage declarative pipeline
+├── .github/workflows/
+│   ├── python-ci.yml              # Python lint + test + Docker smoke
+│   ├── rust-ci.yml                # Rust build + clippy + audit
+│   └── integration-tests.yml      # End-to-end tests (daily + on-push)
+├── services/
+│   └── flight-ingest/
+│       ├── app/
+│       │   ├── main.py            # FastAPI app + all routes
+│       │   ├── auth.py            # JWT token issuance + verification
+│       │   ├── idempotency.py     # Idempotency key cache
+│       │   ├── pagination.py      # Cursor-based event pagination
+│       │   └── webhooks.py        # Outbound webhook delivery + HMAC signing
+│       ├── tests/unit/
+│       │   ├── test_auth.py       # JWT auth tests
+│       │   ├── test_versioning.py # v1 vs v2 tests
+│       │   ├── test_idempotency.py# Idempotency tests
+│       │   ├── test_pagination.py # Cursor pagination tests
+│       │   ├── test_webhooks.py   # Webhook registration tests
+│       │   └── test_main.py       # Core endpoint tests
+│       ├── Dockerfile
+│       └── requirements.txt
+├── tools/log-parser/              # Rust CLI: Jenkins log → structured JSON
+├── helm/flight-ingest/            # Helm chart: HPA, PDB, ServiceMonitor
+├── scripts/                       # trivy-scan, health-check, rollback, slack
+└── docs/ARCHITECTURE.md           # Mermaid pipeline + sequence diagrams
+```
 
 ---
 
-## Security
-
-- **Trivy** scans both the filesystem and Docker image for CVEs
-- **OWASP safety** checks Python dependencies against known vulnerability databases
-- **cargo-audit** scans Rust dependencies against the RustSec Advisory DB
-- **Bandit** checks Python source for common security antipatterns
-- **Docker image** runs as non-root (UID 1000), read-only root filesystem, all capabilities dropped
-- **SonarQube** enforces quality + security hotspot gates before any deployment
-
----
-
-## Architecture
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full Mermaid pipeline and sequence diagrams.
-
----
-
-*Part of [kumarrajapuvvalla-bit](https://github.com/kumarrajapuvvalla-bit)’s DevOps portfolio. For educational and portfolio purposes.*
+*Part of [kumarrajapuvvalla-bit](https://github.com/kumarrajapuvvalla-bit)'s DevOps portfolio. For educational and portfolio purposes.*
