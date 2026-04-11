@@ -111,10 +111,7 @@ fn multi_stage_build_extracts_stages() {
 #[test]
 fn multi_stage_build_has_warnings() {
     let parsed = parse_log(MULTI_STAGE_BUILD);
-    assert!(
-        parsed.warning_count() >= 1,
-        "expected at least one warning"
-    );
+    assert!(parsed.warning_count() >= 1, "expected at least one warning");
 }
 
 #[test]

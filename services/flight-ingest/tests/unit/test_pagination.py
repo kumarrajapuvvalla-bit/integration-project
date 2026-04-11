@@ -1,7 +1,6 @@
 """Tests for cursor-based pagination on /v1/events."""
 from fastapi.testclient import TestClient
 from app.main import app
-from app.pagination import _EVENT_STORE
 
 client = TestClient(app)
 
